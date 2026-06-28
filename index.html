@@ -83,13 +83,58 @@ window.SNSVS_DATA={
 };
 
 // ═══════════════════ CLOUD ═══════════════════
+// PRINCIPI (regole da non violare mai):
+//  1) Il cloud (Drive) è l'unica fonte di verità; il locale è solo una cache.
+//  2) Ogni record ha un timestamp "ts": in caso di conflitto vince il più recente (last-write-wins).
+//  3) Le SCRITTURE vanno via POST (body, text/plain): nessun limite di lunghezza, nessun troncamento.
+//  4) Le LETTURE (pull) avvengono SOLO: all'avvio e quando l'utente preme "Aggiorna da cloud".
+//     Nessun auto-push periodico (era la causa dei loop e delle sovrascritture infinite).
+//  5) Cancellazioni propagate via "tombstone": eliminare scrive un marcatore {deleted:true,ts}.
+window._structTs=0;
+window._dirty={}; // id in editing: il pull non lo sovrascrive
+window._pushTimers={}; // id -> timer del push "debounced" verso il cloud
 window._b64=function(s){return btoa(unescape(encodeURIComponent(s)))};
+// LETTURA — GET con query corta
 window._cloudGet=function(p,cb){if(!window.API_URL){if(cb)cb(null);return}var qs=Object.keys(p).map(function(k){return k+"="+encodeURIComponent(p[k])}).join("&");fetch(window.API_URL+"?"+qs+"&t="+Date.now()).then(function(r){return r.json()}).then(function(d){if(cb)cb(d)}).catch(function(){if(cb)cb(null)})};
-window._processQueue=function(){if(window._saving||!window._saveQueue.length)return;window._saving=true;var op=window._saveQueue.shift();op.retries=(op.retries||0)+1;window._cloudGet(op.params,function(r){window._saving=false;if((!r||!r.ok)&&op.retries<5)window._saveQueue.unshift(op);var d=600*Math.pow(2,Math.min(op.retries-1,3));if(window._saveQueue.length)setTimeout(window._processQueue,d);else{window._syncing=false;window.dispatchEvent(new Event("syncStatus"))}})};
-window._cloudSave=function(id,data){if(!window.API_URL)return;window._syncing=true;window.dispatchEvent(new Event("syncStatus"));var b=window._b64(JSON.stringify({id:id,data:data}));if((window.API_URL+"?action=upsert&id="+id+"&data="+encodeURIComponent(b)).length>7800){if(data.content&&data.content.length>3000){data=Object.assign({},data);data.content=data.content.substring(0,3000)};b=window._b64(JSON.stringify({id:id,data:data}))}window._saveQueue.push({params:{action:"upsert",id:id,data:b},retries:0});window._processQueue()};
-window._saveSections=function(){try{localStorage.setItem(window.SK+"_sec",JSON.stringify(window._sections))}catch(e){}};
+// SCRITTURA — POST text/plain (niente preflight CORS, niente limite URL)
+window._cloudPost=function(payload,cb){if(!window.API_URL){if(cb)cb(null);return}fetch(window.API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)}).then(function(r){return r.json()}).then(function(d){if(cb)cb(d)}).catch(function(){if(cb)cb(null)})};
+// Coda scritture con retry esponenziale
+window._processQueue=function(){if(window._saving||!window._saveQueue.length)return;window._saving=true;var op=window._saveQueue.shift();op.retries=(op.retries||0)+1;window._cloudPost(op.payload,function(r){window._saving=false;if((!r||!r.ok)&&op.retries<5)window._saveQueue.unshift(op);var d=700*Math.pow(2,Math.min(op.retries-1,3));if(window._saveQueue.length)setTimeout(window._processQueue,d);else{window._syncing=false;window.dispatchEvent(new Event("syncStatus"))}})};
+window._enqueue=function(payload){if(!window.API_URL)return;window._syncing=true;window.dispatchEvent(new Event("syncStatus"));window._saveQueue.push({payload:payload,retries:0});window._processQueue()};
+// Salva il CONTENUTO di una sezione — INTERO, nessun troncamento
+window._cloudSave=function(id,data){window._enqueue({action:"upsert",id:id,ts:data.ts||Date.now(),data:data})};
+// Tombstone: elimina il contenuto di una sezione dal cloud
+window._cloudDelete=function(id){window._enqueue({action:"delete",id:id,ts:Date.now()})};
+window._saveUsersCloud=function(nu){window._enqueue({action:"saveUsers",ts:Date.now(),data:nu})};
+// Salva la STRUTTURA (elenco/ordine/titoli sezioni) → propaga aggiunte/cancellazioni/riordino
+window._saveSections=function(){try{localStorage.setItem(window.SK+"_sec",JSON.stringify(window._sections))}catch(e){}window._structTs=Date.now();window._enqueue({action:"saveStructure",ts:window._structTs,data:window._sections})};
 window._saveAll=function(){try{localStorage.setItem(window.SK,JSON.stringify(window._SUBS));localStorage.setItem(window.SK+"_users",JSON.stringify(window._USERS))}catch(e){}};
-window._load=function(){try{var d=localStorage.getItem(window.SK);if(d)window._SUBS=JSON.parse(d);var u=localStorage.getItem(window.SK+"_users");if(u)window._USERS=JSON.parse(u);var s=localStorage.getItem(window.SK+"_sec");if(s)window._sections=JSON.parse(s)}catch(e){}if(!window._sections||!window._sections.length)window._sections=JSON.parse(JSON.stringify(window.DEFAULT_SECTIONS));if(!window.API_URL)return;window._cloudGet({action:"load"},function(cloud){if(cloud&&Array.isArray(cloud)){cloud.forEach(function(e){if(e&&e.id&&e.data)window._SUBS[e.id]=e.data});window._saveAll();window.dispatchEvent(new Event("dataReloaded"))}});window._cloudGet({action:"loadUsers"},function(u){if(u&&Array.isArray(u)){window._USERS=u;window._saveAll()}})};
+// PULL — fonde il cloud nel locale per timestamp, senza toccare ciò che si sta editando
+window._pullCloud=function(cb){
+  if(!window.API_URL){if(cb)cb();return}
+  window._syncing=true;window.dispatchEvent(new Event("syncStatus"));
+  var pending=3;function done(){pending--;if(pending<=0){window._saveAll();window._syncing=false;window.dispatchEvent(new Event("syncStatus"));window.dispatchEvent(new Event("dataReloaded"));if(cb)cb()}}
+  window._cloudGet({action:"load"},function(cloud){
+    if(cloud&&Array.isArray(cloud)){cloud.forEach(function(e){
+      if(!e||!e.id||window._dirty[e.id])return;
+      var loc=window._SUBS[e.id];var cts=e.ts||(e.data&&e.data.ts)||0;var lts=(loc&&loc.ts)||0;
+      if(e.deleted){if(cts>=lts)delete window._SUBS[e.id];return}
+      if(!loc||cts>=lts)window._SUBS[e.id]=e.data;
+    })}
+    done();
+  });
+  window._cloudGet({action:"loadStructure"},function(s){
+    if(s&&s.data&&s.data.length){var sts=s.ts||0;if(sts>=(window._structTs||0)){window._sections=s.data;window._structTs=sts;try{localStorage.setItem(window.SK+"_sec",JSON.stringify(window._sections))}catch(e){}window.dispatchEvent(new Event("sectionsChanged"))}}
+    done();
+  });
+  window._cloudGet({action:"loadUsers"},function(u){if(u&&Array.isArray(u)&&u.length){window._USERS=u}done()});
+};
+window.syncNow=function(){window._pullCloud()};
+// Invia SUBITO al cloud tutte le modifiche in attesa (pulsante "Salva ora", uscita, chiusura scheda)
+window.flushPending=function(){Object.keys(window._pushTimers).forEach(function(id){clearTimeout(window._pushTimers[id]);delete window._pushTimers[id];window._dirty[id]=false;if(window._SUBS[id])window._cloudSave(id,window._SUBS[id])})};
+window.hasPending=function(){return Object.keys(window._pushTimers).length>0||window._saveQueue.length>0};
+try{window.addEventListener("beforeunload",function(e){if(window.hasPending()){window.flushPending();e.preventDefault();e.returnValue=""}})}catch(e){}
+window._load=function(){try{var d=localStorage.getItem(window.SK);if(d)window._SUBS=JSON.parse(d);var u=localStorage.getItem(window.SK+"_users");if(u)window._USERS=JSON.parse(u);var s=localStorage.getItem(window.SK+"_sec");if(s)window._sections=JSON.parse(s)}catch(e){}if(!window._sections||!window._sections.length)window._sections=JSON.parse(JSON.stringify(window.DEFAULT_SECTIONS));window._pullCloud();};
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -185,7 +230,15 @@ function uid(){return"D"+(Date.now().toString(36)+Math.random().toString(36).sub
 function fmtE(v){var n=parseFloat(String(v).replace(/[^\d,.-]/g,"").replace(",","."));return isNaN(n)?"":n.toLocaleString("it-IT",{minimumFractionDigits:2})+" €"}
 function parseN(s){return parseFloat(String(s||"0").replace(/[^\d,.-]/g,"").replace(",","."))||0}
 function getData(id){return window._SUBS[id]||null}
-function setData(id,data,userName){data.user=userName;data.ts=Date.now();window._SUBS[id]=data;window._saveAll();window._cloudSave(id,data);window.dispatchEvent(new Event("dataReloaded"))}
+function setData(id,data,userName){
+  data.user=userName;data.ts=Date.now();
+  window._SUBS[id]=data;window._saveAll();            // salvataggio LOCALE immediato (non perdi nulla)
+  window._dirty[id]=true;                              // protegge da sovrascritture del pull mentre scrivi
+  window.dispatchEvent(new Event("dataReloaded"));
+  // PUSH sul cloud "debounced": parte ~2,5s dopo che smetti di scrivere → niente raffica di richieste
+  if(window._pushTimers[id])clearTimeout(window._pushTimers[id]);
+  window._pushTimers[id]=setTimeout(function(){delete window._pushTimers[id];window._dirty[id]=false;window._cloudSave(id,window._SUBS[id])},2500);
+}
 function canEdit(u,sid){if(!u)return false;if(u.role==="Amministratore")return true;if(sid==="s1_3"||sid.indexOf("prog_")===0||sid.indexOf("mis_")===0)return true;if(!u.sections||!u.sections.length)return false;return u.sections.indexOf(sid)>=0||u.sections.some(function(s){return sid.indexOf(s)===0})}
 function secStatus(id){var d=getData(id);if(!d||!d.content)return"empty";return d.content.replace(/<[^>]+>/g,"").trim().length>50?"done":"partial"}
 
@@ -434,11 +487,11 @@ function AdminPage(p){
   // Section management
   var _ns=S("");var newSecTitle=_ns[0];
   E(function(){setUsers(window._USERS||[])},[]);
-  function addUser(){if(!nn.trim())return;var u={name:nn.trim(),role:nr,sections:[],ts:Date.now()};var nu=users.concat([u]);setUsers(nu);window._USERS=nu;window._saveAll();if(window.API_URL){var b=window._b64(JSON.stringify(nu));window._saveQueue.push({params:{action:"saveUsers",data:b},retries:0});window._processQueue()}_n[1]("")}
-  function rmUser(name){if(!confirm("Rimuovere "+name+"?"))return;var nu=users.filter(function(u){return u.name!==name});setUsers(nu);window._USERS=nu;window._saveAll()}
-  function saveAssign(){var nu=users.map(function(u){return u.name===selU?Object.assign({},u,{sections:asecs}):u});setUsers(nu);window._USERS=nu;window._saveAll();if(window.API_URL){var b=window._b64(JSON.stringify(nu));window._saveQueue.push({params:{action:"saveUsers",data:b},retries:0});window._processQueue()}_sel[1](null)}
+  function addUser(){if(!nn.trim())return;var u={name:nn.trim(),role:nr,sections:[],ts:Date.now()};var nu=users.concat([u]);setUsers(nu);window._USERS=nu;window._saveAll();window._saveUsersCloud(nu);_n[1]("")}
+  function rmUser(name){if(!confirm("Rimuovere "+name+"?"))return;var nu=users.filter(function(u){return u.name!==name});setUsers(nu);window._USERS=nu;window._saveAll();window._saveUsersCloud(nu)}
+  function saveAssign(){var nu=users.map(function(u){return u.name===selU?Object.assign({},u,{sections:asecs}):u});setUsers(nu);window._USERS=nu;window._saveAll();window._saveUsersCloud(nu);_sel[1](null)}
   function addSection(){if(!newSecTitle.trim())return;var id="custom_"+uid();window._sections.push({id:id,title:newSecTitle.trim(),level:1,type:"text",hint:"",custom:true});window._saveSections();window.dispatchEvent(new Event("sectionsChanged"));_ns[1]("")}
-  function rmSection(sid){if(!confirm("Rimuovere questa sezione?"))return;window._sections=window._sections.filter(function(s){return s.id!==sid});window._saveSections();window.dispatchEvent(new Event("sectionsChanged"))}
+  function rmSection(sid){if(!confirm("Rimuovere questa sezione?"))return;window._sections=window._sections.filter(function(s){return s.id!==sid});delete window._SUBS[sid];window._saveAll();window._cloudDelete(sid);window._saveSections();window.dispatchEvent(new Event("sectionsChanged"))}
   function moveSection(sid,dir){var idx=window._sections.findIndex(function(s){return s.id===sid});if(idx<0)return;var ni=idx+dir;if(ni<0||ni>=window._sections.length)return;var tmp=window._sections[idx];window._sections[idx]=window._sections[ni];window._sections[ni]=tmp;window._saveSections();window.dispatchEvent(new Event("sectionsChanged"))}
 
   return h("div",null,
@@ -495,7 +548,7 @@ function LoginPage(p){
     var reg=(window._USERS||[]).find(function(u){return u.name.toLowerCase()===nm.trim().toLowerCase()});
     if(reg){try{localStorage.setItem("defr_user",JSON.stringify(reg))}catch(e){}p.onLogin(reg)}
     else if(noUsers){var u={name:nm.trim(),role:rl,sections:[],ts:Date.now()};window._USERS=[u];window._saveAll();
-      if(window.API_URL){var b=window._b64(JSON.stringify([u]));window._saveQueue.push({params:{action:"saveUsers",data:b},retries:0});window._processQueue()}
+      window._saveUsersCloud([u]);
       try{localStorage.setItem("defr_user",JSON.stringify(u))}catch(e){}p.onLogin(u)}
     else alert("Nome non trovato. Contatta l'Amministratore.")}
   return h("div",{className:"login-pg"},h("div",{className:"login-card"},
@@ -766,9 +819,11 @@ function App(){
       h("div",{className:"spacer"}),
       h("span",{className:"meta"},user.name," (",user.role,")"),
       h("span",{className:"dot"+(sync?" busy":""),title:sync?"Sync...":"OK"}),
+      h("button",{onClick:function(){window.flushPending()},title:"Invia subito al cloud le modifiche in attesa"},"💾 Salva ora"),
+      h("button",{onClick:function(){window.syncNow()},title:"Scarica le ultime modifiche dal cloud"},sync?"⏳ Sync...":"🔄 Aggiorna da cloud"),
       isAdmin?h("button",{onClick:genPDF},"📄 Genera PDF"):null,
       isAdmin?h("button",{onClick:function(){_a[1]("_admin")}},"⚙️ Admin"):null,
-      h("button",{onClick:function(){if(confirm("Uscire?")){try{localStorage.removeItem("defr_user")}catch(e){}_u[1](null)}}},"Esci")
+      h("button",{onClick:function(){if(confirm("Uscire?")){window.flushPending();try{localStorage.removeItem("defr_user")}catch(e){}_u[1](null)}}},"Esci")
     ),
     // DIRETTORE DEL SERVIZIO: solo Missioni, niente sidebar
     !isAdmin?h("div",{style:{flex:1,display:"flex",flexDirection:"column"}},
@@ -805,7 +860,7 @@ function App(){
                 h("button",{onClick:function(){setEditSec(s.id)},title:"Rinomina"},"✏️"),
                 h("button",{onClick:function(){if(idx>0){var tmp=window._sections[idx];window._sections[idx]=window._sections[idx-1];window._sections[idx-1]=tmp;window._saveSections();_sc[1](window._sections.slice())}},title:"Sposta su",disabled:idx===0},"▲"),
                 h("button",{onClick:function(){if(idx<window._sections.length-1){var tmp=window._sections[idx];window._sections[idx]=window._sections[idx+1];window._sections[idx+1]=tmp;window._saveSections();_sc[1](window._sections.slice())}},title:"Sposta giù",disabled:idx===sections.length-1},"▼"),
-                h("button",{onClick:function(){if(confirm("Eliminare \""+s.title+"\"?")){window._sections.splice(idx,1);window._saveSections();_sc[1](window._sections.slice());if(actSec===s.id)_a[1](sections[0]?sections[0].id:"premessa")}},title:"Elimina",style:{color:"var(--err)"}},"✕")
+                h("button",{onClick:function(){if(confirm("Eliminare \""+s.title+"\"?")){window._sections.splice(idx,1);delete window._SUBS[s.id];window._saveAll();window._cloudDelete(s.id);window._saveSections();_sc[1](window._sections.slice());if(actSec===s.id)_a[1](sections[0]?sections[0].id:"premessa")}},title:"Elimina",style:{color:"var(--err)"}},"✕")
               ):null
             ),
             addAfter===idx?h("div",{className:"si-addbar",style:{paddingLeft:10+s.level*12}},
