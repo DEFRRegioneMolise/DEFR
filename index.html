@@ -98,8 +98,8 @@ window._processQueue=function(){
     // Verifica leggera: ping JSONP per confermare che il server risponde
     window._jsonp({action:"ping"},function(r){
       window._saving=false;
-      if(r&&r.ok){window._lastSave=Date.now();window.dispatchEvent(new Event("saveOk"))}
-      else if(op.retries<4){window._saveQueue.unshift(op)}
+      if(r&&r.ok){window._cloudDown=false;window._lastSave=Date.now();window.dispatchEvent(new Event("saveOk"))}
+      else{window._cloudDown=true;if(op.retries<4)window._saveQueue.unshift(op)}
       if(window._saveQueue.length)setTimeout(window._processQueue,500);
       else{window._syncing=false;window.dispatchEvent(new Event("syncStatus"))}
     });
@@ -138,9 +138,22 @@ window._load=function(){
   if(!window._missioni||!window._missioni.length)window._missioni=JSON.parse(JSON.stringify(window.DEFAULT_MISSIONI));
   if(!window._programmi||!window._programmi.length)window._programmi=JSON.parse(JSON.stringify(window.DEFAULT_PROGRAMMI));
   if(!window.API_URL)return;
+  window._jsonp({action:"ping"},function(r){window._cloudDown=!(r&&r.ok);window.dispatchEvent(new Event("syncStatus"))});
   window._jsonp({action:"load"},function(cloud){
-    if(cloud&&Array.isArray(cloud)){cloud.forEach(function(e){if(e&&e.id&&e.data)window._SUBS[e.id]=e.data});window._saveLocal();window.dispatchEvent(new Event("dataReloaded"))}});
-  window._jsonp({action:"loadUsers"},function(u){if(u&&Array.isArray(u)&&u.length){window._USERS=u;window._saveLocal();window.dispatchEvent(new Event("dataReloaded"))}});
+    if(cloud&&Array.isArray(cloud)){
+      window._cloudDown=false;
+      var cl={};cloud.forEach(function(e){if(e&&e.id&&e.data)cl[e.id]=e.data});
+      // cloud → locale: vince la versione più recente (timestamp)
+      Object.keys(cl).forEach(function(id){var l=window._SUBS[id];
+        if(!l||(cl[id].ts||0)>=(l.ts||0))window._SUBS[id]=cl[id]});
+      // locale → cloud: ripubblica ciò che il cloud non ha o ha in versione più vecchia
+      Object.keys(window._SUBS).forEach(function(id){var c=cl[id];var l=window._SUBS[id];
+        if(!c||(l.ts||0)>(c.ts||0))window._push("upsert",id,l)});
+      window._saveLocal();window.dispatchEvent(new Event("dataReloaded"))
+    }else{window._cloudDown=true;window.dispatchEvent(new Event("syncStatus"))}});
+  window._jsonp({action:"loadUsers"},function(u){
+    if(u&&Array.isArray(u)&&u.length){window._USERS=u;window._saveLocal();window.dispatchEvent(new Event("dataReloaded"))}
+    else if(u&&Array.isArray(u)&&!u.length&&window._USERS&&window._USERS.length){window._pushUsers()}});
   window._jsonp({action:"loadStructure"},function(st){if(st&&st.sections){window._sections=st.sections;if(st.missioni)window._missioni=st.missioni;if(st.programmi)window._programmi=st.programmi;if(st.logo)window._customLogo=st.logo;window._saveLocal();window.dispatchEvent(new Event("sectionsChanged"))}});
 };
 window._pushStructure=function(){window._push("saveStructure","",{sections:window._sections,missioni:window._missioni,programmi:window._programmi,logo:window._customLogo})};
@@ -1047,6 +1060,10 @@ function App(){
           h("span",{style:{fontSize:9,opacity:.6,lineHeight:1.2,display:"block"}},"Servizio di Supporto al Direttore Generale — Dott. Francesco Colavita"),h("span",{style:{fontSize:8,opacity:.5,lineHeight:1.25,display:"block",maxWidth:560}},"Ufficio Programmazione strategica - Performance organizzativa - Coordinamento controlli interni - Controllo Strategico","  •  ","Ufficio Statistico"))),
       h("div",{className:"spacer"}),
       h("span",{className:"meta"},user.name," (",user.role,")"),
+      window._cloudDown?
+      h("span",{style:{display:"flex",alignItems:"center",gap:5,fontSize:11,background:"#C62828",padding:"3px 10px",borderRadius:10,fontWeight:700},
+        title:"I dati restano SOLO su questo dispositivo. Verifica il deploy dell\u2019Apps Script (accesso: Chiunque)."},
+        "\u26A0 Cloud NON raggiungibile \u2014 dati solo locali"):
       h("span",{style:{display:"flex",alignItems:"center",gap:5,fontSize:11,background:"rgba(255,255,255,.08)",padding:"3px 10px",borderRadius:10}},
         h("span",{className:"dot"+(sync?" busy":"")}),
         h("span",{style:{opacity:.8}},sync?"Salvataggio...":lastSaveTxt)),
