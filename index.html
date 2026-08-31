@@ -2,6 +2,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>DEFR 2027-2029 | Regione Molise</title>
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHBhdGggZD0iTTE2LDEgTDMxLDEgTDMxLDIwIFEzMSwyOCAxNiwzMSBRMSwyOCAxLDIwIEwxLDEgWiIgZmlsbD0iI0M4MTAyRSIgc3Ryb2tlPSIjQjhCOEI4IiBzdHJva2Utd2lkdGg9IjIiLz48cG9seWdvbiBwb2ludHM9IjMyLDYgMzIsMTQgOCwzMiAwLDMyIiBmaWxsPSIjQzhDQUNBIi8+PHBvbHlnb24gZmlsbD0iI0UyRTNFNCIgcG9pbnRzPSI5LDQgMTAuNSw4IDE0LjUsNi41IDEyLDEwIDE1LDExIDEyLDEyIDE0LjUsMTUuNSAxMC41LDE0IDksMTggNy41LDE0IDMuNSwxNS41IDYsMTIgMywxMSA2LDEwIDMuNSw2LjUgNy41LDgiLz48L3N2Zz4=">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css">
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
@@ -13,7 +14,7 @@
 // ═══════════ CONFIG ═══════════
 window.API_URL="https://script.google.com/macros/s/AKfycbxdX_V-DjH-EzdV-RRTEYgh1HL5PqVojhCcOuBUbDZ9X0hBvuMMAiUXsWkxNPoiyeLJ/exec";
 window.SK="defr_2729";
-window.VERSION="7.0";
+window.VERSION="7.1";
 window.LOGO_URI="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjYwIiB2aWV3Qm94PSIwIDAgMjQwIDI2MCI+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9InNoaWVsZENsaXAiPjxwYXRoIGQ9Ik0xMjAsNiBMMjI4LDYgUTIzNCw2IDIzNCwxMiBMMjM0LDE1MiBRMjM0LDIxNCAxNzgsMjQwIFExNDgsMjU0IDEyMCwyNTYgUTkyLDI1NCA2MiwyNDAgUTYsMjE0IDYsMTUyIEw2LDEyIFE2LDYgMTIsNiBaIi8+PC9jbGlwUGF0aD4KPGxpbmVhckdyYWRpZW50IGlkPSJzaWx2ZXJHcmFkIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj4KPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI0Q4RDhEQSIvPjxzdG9wIG9mZnNldD0iNTAlIiBzdG9wLWNvbG9yPSIjQjRCNkI4Ii8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjQzhDQUNBIi8+CjwvbGluZWFyR3JhZGllbnQ+CjwvZGVmcz4KPCEtLSBCb3JkbyBhcmdlbnRvIChzY3VkbyBlc3Rlcm5vKSAtLT4KPHBhdGggZD0iTTEyMCw2IEwyMjgsNiBRMjM0LDYgMjM0LDEyIEwyMzQsMTUyIFEyMzQsMjE0IDE3OCwyNDAgUTE0OCwyNTQgMTIwLDI1NiBROTIsMjU0IDYyLDI0MCBRNiwyMTQgNiwxNTIgTDYsMTIgUTYsNiAxMiw2IFoiIGZpbGw9InVybCgjc2lsdmVyR3JhZCkiIHN0cm9rZT0iIzhBOEM4RSIgc3Ryb2tlLXdpZHRoPSIyIi8+CjwhLS0gQ2FtcG8gcm9zc28gaW50ZXJubyAtLT4KPHBhdGggZD0iTTEyMCwxNiBMMjIwLDE2IFEyMjQsMTYgMjI0LDIwIEwyMjQsMTUwIFEyMjQsMjA2IDE3MiwyMzEgUTE0NSwyNDMgMTIwLDI0NSBROTUsMjQzIDY4LDIzMSBRMTYsMjA2IDE2LDE1MCBMMTYsMjAgUTE2LDE2IDIwLDE2IFoiIGZpbGw9IiNDODEwMkUiLz4KPCEtLSBCYW5kYSBkaWFnb25hbGUgYXJnZW50byAoZGEgc3BhbGxhIGRlc3RyYSBhIHB1bnRhIHNpbmlzdHJhLCBjb21lIHN0ZW1tYSB1ZmZpY2lhbGUpIC0tPgo8ZyBjbGlwLXBhdGg9InVybCgjc2hpZWxkQ2xpcCkiPgo8cG9seWdvbiBwb2ludHM9IjI0MCw0MiAyNDAsMTEwIDU1LDI2MiAtMTQsMjYyIiBmaWxsPSJ1cmwoI3NpbHZlckdyYWQpIiBzdHJva2U9IiM5QTlDOUUiIHN0cm9rZS13aWR0aD0iMS41Ii8+CjwvZz4KPCEtLSBTdGVsbGEgZCdhcmdlbnRvIGEgOCBwdW50ZSBuZWwgY2FudG9uIGFsdG8gc2luaXN0cm8gLS0+CjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDY0LDY0KSI+Cjxwb2x5Z29uIGZpbGw9IiNFMkUzRTQiIHN0cm9rZT0iIzhBOEM4RSIgc3Ryb2tlLXdpZHRoPSIxLjUiCnBvaW50cz0iMCwtMzYgOC41LC0xMSAzMywtMjUuNSAxNSwtNiAzNiwwIDE1LDYgMzMsMjUuNSA4LjUsMTEgMCwzNiAtOC41LDExIC0zMywyNS41IC0xNSw2IC0zNiwwIC0xNSwtNiAtMzMsLTI1LjUgLTguNSwtMTEiLz4KPGNpcmNsZSBjeD0iMCIgY3k9IjAiIHI9IjYiIGZpbGw9IiNDOENBQ0EiIHN0cm9rZT0iIzhBOEM4RSIgc3Ryb2tlLXdpZHRoPSIxIi8+CjwvZz4KPC9zdmc+Cg==";
 
 window._SUBS={};window._USERS=[];window._syncing=false;window._saveQueue=[];window._saving=false;
@@ -861,8 +862,47 @@ function AdminPage(p){
             alert("Sincronizzazione avviata: invio modifiche in sospeso + ricarica completa dal cloud.");
           }},"☁️ Sincronizza Ora"),
           h("button",{className:"btn btn-g btn-sm",onClick:function(){
-            window._jsonp({action:"ping"},function(r){alert(r&&r.ok?"✅ Il backend risponde correttamente!":"❌ Il backend NON risponde. Verifica il deploy dell'Apps Script (accesso: Chiunque).")});
-          }},"🔍 Test Connessione")),
+            // Diagnostica dettagliata: distingue URL errato, deploy vecchio, permessi, rete
+            var report=[];
+            report.push("URL configurato: "+(window.API_URL?"sì":"NO"));
+            if(!window.API_URL){alert(report.join("\n"));return}
+            var t0=Date.now();
+            window._jsonp({action:"ping"},function(r){
+              var ms=Date.now()-t0;
+              if(r&&r.ok){
+                report.push("✅ Backend raggiungibile ("+ms+" ms)");
+                // Verifica che sia la versione v7 del backend (deve rispondere a structMeta)
+                window._jsonp({action:"structMeta"},function(sm){
+                  if(sm&&sm.ok!==undefined){
+                    report.push("✅ Backend versione v7 corretta");
+                    window._jsonp({action:"loadUsers"},function(u){
+                      report.push(Array.isArray(u)?("✅ Lettura utenti OK ("+u.filter(function(x){return!x.deleted}).length+" attivi, "+u.filter(function(x){return x.deleted}).length+" rimossi)"):"❌ Lettura utenti fallita");
+                      report.push("Modifiche in sospeso: "+_pendingCount());
+                      report.push("Ultimo salvataggio confermato: "+(window._lastSave?new Date(window._lastSave).toLocaleTimeString("it-IT"):"nessuno"));
+                      alert(report.join("\n"));
+                    });
+                  }else{
+                    report.push("⚠️ BACKEND VECCHIO: manca l'azione 'structMeta'.");
+                    report.push("→ Incolla il codice Backend v7 su script.google.com");
+                    report.push("→ Deploy > Gestisci distribuzioni > ✏️ > Nuova versione > Deploy");
+                    alert(report.join("\n"));
+                  }
+                });
+              }else{
+                report.push("❌ Backend NON raggiungibile");
+                report.push("");
+                report.push("Verifica nell'ordine:");
+                report.push("1) Apri questo link in una scheda del browser:");
+                report.push(window.API_URL+"?action=ping");
+                report.push("   • Se vedi {\"ok\":true} → il backend va, problema di rete locale");
+                report.push("   • Se vedi 404 → URL errato o distribuzione eliminata");
+                report.push("   • Se chiede login Google → accesso non impostato su 'Chiunque'");
+                report.push("   • Se dice azione sconosciuta → deploy del codice v7 mancante");
+                report.push("2) Deploy > Gestisci distribuzioni: Esegui come 'Me', Accesso 'Chiunque'");
+                alert(report.join("\n"));
+              }
+            });
+          }},"🔍 Diagnostica Completa")),
         h("div",{className:"hint-box",style:{marginTop:12}},
           h("strong",null,"ℹ️ Come funziona il salvataggio: "),
           "Ogni modifica viene salvata automaticamente in locale (immediato) e inviata al cloud in background (POST, senza limiti di dimensione). L'indicatore verde in alto a destra conferma la sincronizzazione. I Direttori che accedono da altri computer ricevono i dati dal cloud all'accesso e con '🔄 Ricarica'."))
